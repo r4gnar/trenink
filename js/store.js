@@ -23,25 +23,52 @@ function defaults() {
     dismissed: [], // odmítnuté návrhy po pauze
     inProgress: null,
     lastBackup: null,
+    backupSnoozeUntil: null,
   };
 }
 
 let state = load();
 
-function load() {
+// Doplní chybějící položky z výchozího stavu (starší data, záloha ze starší verze).
+function withDefaults(saved) {
   const base = defaults();
+  if (!saved) return base;
+  return {
+    ...base,
+    ...saved,
+    schema: SCHEMA,
+    settings: { ...base.settings, ...saved.settings },
+    level: { ...base.level, ...saved.level, progression: { ...base.level.progression, ...saved.level?.progression } },
+  };
+}
+
+function load() {
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY));
-    if (!saved) return base;
-    return {
-      ...base,
-      ...saved,
-      settings: { ...base.settings, ...saved.settings },
-      level: { ...base.level, ...saved.level, progression: { ...base.level.progression, ...saved.level?.progression } },
-    };
+    return withDefaults(JSON.parse(localStorage.getItem(KEY)));
   } catch {
-    return base;
+    return defaults();
   }
+}
+
+function persist() {
+  try {
+    localStorage.setItem(KEY, JSON.stringify(state));
+    return true;
+  } catch (err) {
+    console.error('Uložení selhalo', err);
+    return false;
+  }
+}
+
+// Obnova ze zálohy: nahradí všechna data.
+export function replaceAll(data) {
+  state = withDefaults(data);
+  return persist();
+}
+
+export function resetAll() {
+  state = defaults();
+  return persist();
 }
 
 export function getState() {
@@ -50,13 +77,7 @@ export function getState() {
 
 export function update(mutator) {
   mutator(state);
-  try {
-    localStorage.setItem(KEY, JSON.stringify(state));
-  } catch (err) {
-    console.error('Uložení selhalo', err);
-    return false;
-  }
-  return true;
+  return persist();
 }
 
 // Požádá Android, aby data appky nemazal při nedostatku místa.

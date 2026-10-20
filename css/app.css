@@ -1384,3 +1384,50 @@ table.plan.rounds th,
 table.plan.rounds td {
   padding-right: 6px;
 }
+
+/* ---------- záloha ---------- */
+.strong-label {
+  font-weight: 700;
+  margin-top: 4px;
+}
+.seg.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+.seg.five {
+  grid-template-columns: repeat(5, 1fr);
+}
+.seg.four .opt,
+.seg.five .opt {
+  font-size: 0.85rem;
+}
+.file-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.import-box {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-left: 3px solid var(--accent);
+  padding: 4px 0 4px 12px;
+}
+.import-box .btn-primary,
+.btn-primary.small-btn {
+  min-height: 52px;
+  font-size: 1.05rem;
+}
+.import-error {
+  color: var(--warn);
+  font-weight: 600;
+}
+.reminder {
+  border-color: var(--muscle);
+}
+.link-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}

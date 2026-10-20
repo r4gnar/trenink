@@ -12,14 +12,15 @@ import {
   warmupFor,
   weekPlan,
 } from './plan.js';
+import { backupReminder, canShareFile, downloadBackup, parseBackup, restoreBackup, shareBackup, snoozeReminder } from './backup.js';
 import { bindHistory, viewHistory, viewSession } from './history.js';
 import { applySuggestion, cleanStreak, describeChange, suggestAfterGap, zeroStages } from './progress.js';
 import { signalGo, unlockAudio } from './signals.js';
-import { getState, update, requestPersistence } from './store.js';
+import { getState, update, requestPersistence, resetAll } from './store.js';
 import { daysSince, esc, formatTime, html, plural } from './util.js';
 import { discardWorkout, mountWorkout, startWorkout } from './workout.js';
 
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.5.0';
 
 const $main = document.getElementById('main');
 const $title = document.getElementById('title');
@@ -54,6 +55,7 @@ function viewHome() {
 
   const sug = currentSuggestion(state);
   const streak = cleanStreak(state);
+  const remind = backupReminder(state);
 
   return html`
     ${sug
@@ -72,6 +74,18 @@ function viewHome() {
                 <button type="button" class="btn-secondary" data-act="sug-no">Ještě ne</button>
                 <button type="button" class="btn-primary small-btn" data-act="sug-yes">Potvrdit</button>
               </div>`}
+        </section>`
+      : ''}
+
+    ${remind
+      ? html`
+        <section class="card reminder">
+          <h3>Čas na zálohu</h3>
+          <p class="small">${remind.never ? 'Data ještě nemáš zálohovaná' : `Poslední záloha před ${remind.days} dny`} a přibylo ${remind.fresh} ${plural(remind.fresh, 'trénink', 'tréninky', 'tréninků')}. Bez zálohy o ně při výměně telefonu přijdeš.</p>
+          <div class="wk-row">
+            <button type="button" class="btn-secondary" data-act="snooze-backup">Za týden</button>
+            <a class="btn-primary small-btn link-btn" href="#/nastaveni">Zálohovat</a>
+          </div>
         </section>`
       : ''}
 
@@ -341,14 +355,52 @@ function viewSettings() {
         <label class="opt"><input type="checkbox" name="sound" ${s.sound ? 'checked' : ''}><span>Pípnutí na konci přechodu a pauzy</span></label>
         <label class="opt"><input type="checkbox" name="vibration" ${s.vibration ? 'checked' : ''}><span>Vibrace</span></label>
         <button type="button" class="btn-secondary" id="test-signal">Vyzkoušet</button>
-        <p class="muted small">Pípnutí jde přes reproduktor médií — hlasitost médií nesmí být ztlumená. Změny platí od dalšího tréninku.</p>
+        <p class="muted small">Pípnutí jde přes reproduktor médií — hlasitost médií nesmí být ztlumená.</p>
+      </fieldset>
+
+      <fieldset class="card">
+        <legend>Časy</legend>
+        <p class="small strong-label">Přechod mezi cviky</p>
+        <div class="seg four">
+          ${[10, 15, 20, 30].map((v) => radio('transitionSec', String(v), `${v} s`, String(s.transitionSec)))}
+        </div>
+        <p class="small strong-label">Pauza po okruhu</p>
+        <div class="seg five">
+          ${radio('restSec', 'plan', 'plán', s.restSec == null ? 'plan' : String(s.restSec))}
+          ${[60, 90, 120, 150].map((v) => radio('restSec', String(v), `${v} s`, s.restSec == null ? 'plan' : String(s.restSec)))}
+        </div>
+        <p class="muted small">„Plán“ = podle týdne (120 s v T1–T2, jinak 90 s). Plán doporučuje přechod ~15 s a pauzu prodlužovat nejvýš o 30 s. Změny platí od dalšího tréninku.</p>
       </fieldset>
     </form>
 
     <section class="card">
-      <h3>Data</h3>
+      <h3>Záloha dat</h3>
       <p class="small">Všechna data jsou uložená jen v tomto telefonu. <span id="persist" class="muted">Zjišťuji stav úložiště…</span></p>
-      <p class="muted small">Záloha a obnova dat přijde v kroku 5.</p>
+      <p class="small">${state.lastBackup
+        ? `Poslední záloha: ${new Date(state.lastBackup).toLocaleDateString('cs-CZ')}.`
+        : 'Zatím jsi nezálohoval.'} Při výměně telefonu nebo smazání dat prohlížeče o data bez zálohy přijdeš.</p>
+      ${canShareFile()
+        ? html`<button type="button" class="btn-primary small-btn" data-act="share-backup">Poslat zálohu…</button>
+               <p class="muted small">Otevře sdílení — pošli si soubor mailem nebo ho ulož na Disk.</p>`
+        : ''}
+      <button type="button" class="btn-secondary" data-act="download-backup">Uložit zálohu do telefonu</button>
+      <p class="muted small">Soubor se uloží do Stažených souborů.</p>
+    </section>
+
+    <section class="card">
+      <h3>Obnova ze zálohy</h3>
+      <p class="small">Načte data ze souboru zálohy — např. na novém telefonu. <strong>Současná data v appce se nahradí.</strong></p>
+      <label class="btn-secondary file-btn">
+        Vybrat soubor zálohy…
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+      </label>
+      <div id="import-result"></div>
+    </section>
+
+    <section class="card">
+      <h3>Smazat všechna data</h3>
+      <p class="small muted">Smaže všechny tréninky, úroveň i nastavení z tohoto telefonu. Nejdřív si udělej zálohu.</p>
+      <button type="button" class="btn-text danger" data-act="reset-all">Smazat všechna data…</button>
     </section>
 
     <p class="muted center small">Verze ${APP_VERSION}</p>
@@ -417,6 +469,10 @@ function bindHome() {
     render();
   };
   $main.querySelector('[data-act="sug-yes"]')?.addEventListener('click', () => answer(true));
+  $main.querySelector('[data-act="snooze-backup"]')?.addEventListener('click', () => {
+    snoozeReminder();
+    render();
+  });
   $main.querySelector('[data-act="sug-no"]')?.addEventListener('click', () => answer(false));
   $main.querySelector('[data-act="discard"]')?.addEventListener('click', () => {
     if (!confirm('Zahodit rozpracovaný trénink? Nic z něj se neuloží.')) return;
@@ -439,6 +495,8 @@ function bindSettings() {
         st.pendingSuggestion = null;
       } else if (e.target.type === 'checkbox') {
         st.settings[name] = checked;
+      } else if (name === 'transitionSec' || name === 'restSec') {
+        st.settings[name] = value === 'plan' ? null : Number(value);
       } else {
         st.settings[name] = value;
       }
@@ -454,6 +512,7 @@ function bindSettings() {
     unlockAudio();
     signalGo();
   });
+  bindBackup();
 
   const $persist = document.getElementById('persist');
   requestPersistence().then((status) => {
@@ -462,6 +521,72 @@ function bindSettings() {
       denied: 'Android je zatím může při nedostatku místa smazat — po přidání appky na plochu to obvykle zmizí.',
       unsupported: 'Prohlížeč neumí trvalé úložiště.',
     }[status];
+  });
+}
+
+function bindBackup() {
+  $main.querySelector('[data-act="share-backup"]')?.addEventListener('click', async () => {
+    try {
+      if (await shareBackup()) render();
+    } catch {
+      alert('Sdílení se nepovedlo. Zkus „Uložit zálohu do telefonu“.');
+    }
+  });
+  $main.querySelector('[data-act="download-backup"]')?.addEventListener('click', () => {
+    downloadBackup();
+    render();
+  });
+  $main.querySelector('[data-act="reset-all"]')?.addEventListener('click', () => {
+    if (!confirm('Opravdu smazat všechna data? Tréninky, úroveň i nastavení zmizí z tohoto telefonu.')) return;
+    if (!confirm('Poslední kontrola: smazání nejde vrátit. Smazat?')) return;
+    resetAll();
+    location.hash = '#/';
+  });
+
+  const $result = document.getElementById('import-result');
+  document.getElementById('import-file').addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    $result.replaceChildren();
+    try {
+      const { data, summary } = parseBackup(await file.text());
+      const current = getState().sessions.length;
+      const n = (k) => `${k} ${plural(k, 'trénink', 'tréninky', 'tréninků')}`;
+      const lines = [
+        `Záloha${summary.exportedAt ? ' z ' + new Date(summary.exportedAt).toLocaleDateString('cs-CZ') : ''}: ${n(summary.sessions)}`,
+        summary.last
+          ? `Poslední trénink ${new Date(summary.last).toLocaleDateString('cs-CZ')}, úroveň ${summary.level}.`
+          : `Úroveň ${summary.level}.`,
+        `V appce je teď ${n(current)} — budou nahrazeny.`,
+      ];
+      const box = document.createElement('div');
+      box.className = 'import-box';
+      for (const line of lines) {
+        const el = document.createElement('p');
+        el.className = 'small';
+        el.textContent = line;
+        box.append(el);
+      }
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-primary small-btn';
+      btn.dataset.act = 'confirm-import';
+      btn.textContent = 'Nahradit data zálohou';
+      btn.addEventListener('click', () => {
+        if (getState().inProgress && !confirm('Máš rozpracovaný trénink — obnovou se zahodí. Pokračovat?')) return;
+        restoreBackup(data);
+        alert(`Obnoveno: ${n(summary.sessions)}.`);
+        location.hash = '#/';
+      });
+      box.append(btn);
+      $result.append(box);
+    } catch (err) {
+      const el = document.createElement('p');
+      el.className = 'small import-error';
+      el.textContent = err.message;
+      $result.append(el);
+    }
   });
 }
 
