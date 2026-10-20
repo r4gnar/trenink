@@ -27,9 +27,14 @@ function markBackedUp() {
   });
 }
 
+// Chrome na Androidu sdílí jen vybrané typy souborů a JSON mezi nimi není —
+// pro sdílení se proto záloha posílá jako .txt (obsah je stejný, obnova bere obojí).
+const SHARE_TYPE = 'text/plain';
+const shareName = () => fileName().replace(/\.json$/, '.txt');
+
 export function canShareFile() {
   try {
-    return !!navigator.canShare?.({ files: [new File(['{}'], 'x.json', { type: 'application/json' })] });
+    return !!navigator.canShare?.({ files: [new File(['{}'], 'x.txt', { type: SHARE_TYPE })] });
   } catch {
     return false;
   }
@@ -50,7 +55,7 @@ export function downloadBackup() {
 
 // Otevře sdílení Androidu (mail, Disk, WhatsApp…). Vrací false, když uživatel sdílení zavřel.
 export async function shareBackup() {
-  const file = new File([backupBlob()], fileName(), { type: 'application/json' });
+  const file = new File([backupJSON()], shareName(), { type: SHARE_TYPE });
   try {
     await navigator.share({ files: [file], title: 'Záloha tréninků' });
     markBackedUp();

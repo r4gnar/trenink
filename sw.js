@@ -1,6 +1,6 @@
 // Při každém nasazení zvýšit VERSION (spolu s APP_VERSION v js/app.js),
 // jinak telefon zůstane na staré verzi z cache.
-const VERSION = '0.5.0';
+const VERSION = '0.5.1';
 const CACHE = `trenink-${VERSION}`;
 
 const FILES = [

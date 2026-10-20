@@ -20,7 +20,7 @@ import { getState, update, requestPersistence, resetAll } from './store.js';
 import { daysSince, esc, formatTime, html, plural } from './util.js';
 import { discardWorkout, mountWorkout, startWorkout } from './workout.js';
 
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.5.1';
 
 const $main = document.getElementById('main');
 const $title = document.getElementById('title');
@@ -392,7 +392,7 @@ function viewSettings() {
       <p class="small">Načte data ze souboru zálohy — např. na novém telefonu. <strong>Současná data v appce se nahradí.</strong></p>
       <label class="btn-secondary file-btn">
         Vybrat soubor zálohy…
-        <input type="file" id="import-file" accept="application/json,.json" hidden>
+        <input type="file" id="import-file" accept="application/json,.json,text/plain,.txt" hidden>
       </label>
       <div id="import-result"></div>
     </section>
@@ -528,8 +528,8 @@ function bindBackup() {
   $main.querySelector('[data-act="share-backup"]')?.addEventListener('click', async () => {
     try {
       if (await shareBackup()) render();
-    } catch {
-      alert('Sdílení se nepovedlo. Zkus „Uložit zálohu do telefonu“.');
+    } catch (err) {
+      alert(`Sdílení se nepovedlo. Zkus „Uložit zálohu do telefonu“.\n\n(${err.name}: ${err.message})`);
     }
   });
   $main.querySelector('[data-act="download-backup"]')?.addEventListener('click', () => {
