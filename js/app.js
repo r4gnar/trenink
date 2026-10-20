@@ -10,9 +10,12 @@ import {
   warmupFor,
   weekPlan,
 } from './plan.js';
+import { signalGo, unlockAudio } from './signals.js';
 import { getState, update, requestPersistence } from './store.js';
+import { daysSince, esc, formatTime, html, plural } from './util.js';
+import { discardWorkout, mountWorkout, startWorkout } from './workout.js';
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.2.0';
 
 const $main = document.getElementById('main');
 const $title = document.getElementById('title');
@@ -20,22 +23,7 @@ const $back = document.getElementById('back');
 
 // ---------- pomocné ----------
 
-const html = (strings, ...values) =>
-  strings.reduce((out, str, i) => out + str + (i < values.length ? [values[i]].flat().join('') : ''), '');
-
-const esc = (s) =>
-  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
 const SIDED_NOTE = { leg: 'levá, hned pravá', side: 'levá, hned pravá strana' };
-
-function daysSince(iso) {
-  const ms = Date.now() - new Date(iso).getTime();
-  return Math.floor(ms / 86400000);
-}
-
-function plural(n, one, few, many) {
-  return n === 1 ? one : n >= 2 && n <= 4 ? few : many;
-}
 
 function levelLabel(state) {
   return state.level.phase === 'ramp' ? `Týden ${state.level.week}` : 'Progrese';
@@ -73,8 +61,15 @@ function viewHome() {
       <a class="link-small" href="#/nastaveni">Změnit týden</a>
     </section>
 
-    <button class="btn-primary" disabled>Začít trénink</button>
-    <p class="muted center small">Spuštění tréninku přijde v dalším kroku vývoje.</p>
+    ${state.inProgress
+      ? html`
+        <section class="card resume">
+          <h3>Rozpracovaný trénink</h3>
+          <p class="muted small">Začatý ${new Date(state.inProgress.start).toLocaleDateString('cs-CZ')} v ${formatTime(state.inProgress.start)} · týden ${state.inProgress.week}</p>
+          <button type="button" class="btn-primary" data-act="resume">Pokračovat</button>
+          <button type="button" class="btn-text" data-act="discard">Zahodit</button>
+        </section>`
+      : html`<button type="button" class="btn-primary" data-act="start">Začít trénink</button>`}
 
     <section class="card">
       <h3>Dnešní trénink</h3>
@@ -273,6 +268,14 @@ function viewSettings() {
         <legend>Délka tréninku</legend>
         <label class="opt"><input type="checkbox" name="threeRounds" ${s.threeRounds ? 'checked' : ''}><span>Natrvalo 3 okruhy místo 4 (vejde se do ~21 min)</span></label>
       </fieldset>
+
+      <fieldset class="card">
+        <legend>Signály během tréninku</legend>
+        <label class="opt"><input type="checkbox" name="sound" ${s.sound ? 'checked' : ''}><span>Pípnutí na konci přechodu a pauzy</span></label>
+        <label class="opt"><input type="checkbox" name="vibration" ${s.vibration ? 'checked' : ''}><span>Vibrace</span></label>
+        <button type="button" class="btn-secondary" id="test-signal">Vyzkoušet</button>
+        <p class="muted small">Pípnutí jde přes reproduktor médií — hlasitost médií nesmí být ztlumená. Změny platí od dalšího tréninku.</p>
+      </fieldset>
     </form>
 
     <section class="card">
@@ -297,7 +300,10 @@ const ROUTES = [
   { re: /^\/cvik\/(\w+)$/, title: 'Cvik', nav: 'cviky', view: viewExercise, back: '#/cviky' },
   { re: /^\/plan$/, title: 'Plán', nav: 'plan', view: viewPlan },
   { re: /^\/nastaveni$/, title: 'Nastavení', nav: 'nastaveni', view: viewSettings },
+  { re: /^\/trenink$/, title: 'Trénink', nav: 'home', mount: mountWorkout },
 ];
+
+let unmount = null;
 
 function render() {
   const path = location.hash.replace(/^#/, '') || '/';
@@ -307,13 +313,34 @@ function render() {
     return;
   }
   const params = path.match(route.re).slice(1);
-  $main.innerHTML = route.view(...params);
+  unmount?.();
+  unmount = null;
+  if (route.mount) unmount = route.mount($main);
+  else $main.innerHTML = route.view(...params);
   $title.textContent = route.title === 'Cvik' ? EXERCISES[params[0]]?.short ?? 'Cvik' : route.title;
   $back.hidden = !route.back;
   $back.href = route.back ?? '#/';
   document.querySelectorAll('.tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.nav === route.nav));
   window.scrollTo(0, 0);
-  if (route.nav === 'nastaveni') bindSettings();
+  if (route.view === viewSettings) bindSettings();
+  if (route.view === viewHome) bindHome();
+}
+
+function bindHome() {
+  $main.querySelector('[data-act="start"]')?.addEventListener('click', () => {
+    unlockAudio();
+    startWorkout();
+    location.hash = '#/trenink';
+  });
+  $main.querySelector('[data-act="resume"]')?.addEventListener('click', () => {
+    unlockAudio();
+    location.hash = '#/trenink';
+  });
+  $main.querySelector('[data-act="discard"]')?.addEventListener('click', () => {
+    if (!confirm('Zahodit rozpracovaný trénink? Nic z něj se neuloží.')) return;
+    discardWorkout();
+    render();
+  });
 }
 
 function bindSettings() {
@@ -325,12 +352,17 @@ function bindSettings() {
         const to = Number(value);
         st.levelHistory.push({ date: new Date().toISOString(), from: st.level.week, to, reason: 'manual' });
         st.level = { ...st.level, phase: 'ramp', week: to };
-      } else if (name === 'threeRounds') {
-        st.settings.threeRounds = checked;
+      } else if (e.target.type === 'checkbox') {
+        st.settings[name] = checked;
       } else {
         st.settings[name] = value;
       }
     });
+  });
+
+  document.getElementById('test-signal').addEventListener('click', () => {
+    unlockAudio();
+    signalGo();
   });
 
   const $persist = document.getElementById('persist');
