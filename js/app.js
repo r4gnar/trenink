@@ -12,13 +12,14 @@ import {
   warmupFor,
   weekPlan,
 } from './plan.js';
+import { bindHistory, viewHistory, viewSession } from './history.js';
 import { applySuggestion, cleanStreak, describeChange, suggestAfterGap, zeroStages } from './progress.js';
 import { signalGo, unlockAudio } from './signals.js';
 import { getState, update, requestPersistence } from './store.js';
 import { daysSince, esc, formatTime, html, plural } from './util.js';
 import { discardWorkout, mountWorkout, startWorkout } from './workout.js';
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 
 const $main = document.getElementById('main');
 const $title = document.getElementById('title');
@@ -364,6 +365,8 @@ const ROUTES = [
   { re: /^\/?$/, title: 'Trénink', nav: 'home', view: viewHome },
   { re: /^\/cviky$/, title: 'Cviky', nav: 'cviky', view: viewExercises },
   { re: /^\/cvik\/(\w+)$/, title: 'Cvik', nav: 'cviky', view: viewExercise, back: '#/cviky' },
+  { re: /^\/historie$/, title: 'Historie', nav: 'historie', view: viewHistory, bind: bindHistory },
+  { re: /^\/historie\/(.+)$/, title: 'Trénink', nav: 'historie', view: viewSession, bind: bindHistory, back: '#/historie' },
   { re: /^\/plan$/, title: 'Plán', nav: 'plan', view: viewPlan },
   { re: /^\/nastaveni$/, title: 'Nastavení', nav: 'nastaveni', view: viewSettings },
   { re: /^\/trenink$/, title: 'Trénink', nav: 'home', mount: mountWorkout },
@@ -388,6 +391,7 @@ function render() {
   $back.href = route.back ?? '#/';
   document.querySelectorAll('.tabbar a').forEach((a) => a.classList.toggle('active', a.dataset.nav === route.nav));
   window.scrollTo(0, 0);
+  route.bind?.($main);
   if (route.view === viewSettings) bindSettings();
   if (route.view === viewHome) bindHome();
 }
