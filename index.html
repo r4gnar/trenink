@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Trénink</title>
+  <meta name="description" content="Tréninkový plán s vlastní vahou — průvodce tréninkem a záznam progresu.">
+  <meta name="theme-color" content="#0E6B56" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#111613" media="(prefers-color-scheme: dark)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div id="sprites" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a id="back" class="back" href="#/" hidden aria-label="Zpět">‹</a>
+    <h1 id="title">Trénink</h1>
+  </header>
+
+  <div id="update" class="update" hidden>
+    <span>Je k dispozici nová verze appky.</span>
+    <button type="button">Obnovit</button>
+  </div>
+
+  <main id="main"></main>
+
+  <nav class="tabbar" aria-label="Hlavní navigace">
+    <a href="#/" data-nav="home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11 12 4l9 7"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5h4v5"/></svg>Domů</a>
+    <a href="#/cviky" data-nav="cviky">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12h2M19.5 12h2"/><rect x="4.5" y="7" width="3.5" height="10" rx="1"/><rect x="16" y="7" width="3.5" height="10" rx="1"/><path d="M8 12h8"/></svg>Cviky</a>
+    <a href="#/plan" data-nav="plan">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>Plán</a>
+    <a href="#/nastaveni" data-nav="nastaveni">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Nastavení</a>
+  </nav>
+
+  <noscript>Appka potřebuje zapnutý JavaScript.</noscript>
+</body>
+</html>
