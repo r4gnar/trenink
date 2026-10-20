@@ -1,4 +1,5 @@
 // Veškerá data appky žijí v localStorage tohoto telefonu. Nic se neodesílá.
+import { PROGRESSION } from './plan.js';
 
 const KEY = 'trenink.v1';
 export const SCHEMA = 1;
@@ -15,10 +16,11 @@ function defaults() {
       sound: true,
       vibration: true,
     },
-    level: { phase: 'ramp', week: 1 },
+    level: { phase: 'ramp', week: 1, progression: Object.fromEntries(Object.keys(PROGRESSION).map((id) => [id, 0])) },
     sessions: [],
     levelHistory: [],
-    pendingSuggestion: null,
+    pendingSuggestion: null, // návrh po posledním tréninku
+    dismissed: [], // odmítnuté návrhy po pauze
     inProgress: null,
     lastBackup: null,
   };
@@ -31,7 +33,12 @@ function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY));
     if (!saved) return base;
-    return { ...base, ...saved, settings: { ...base.settings, ...saved.settings } };
+    return {
+      ...base,
+      ...saved,
+      settings: { ...base.settings, ...saved.settings },
+      level: { ...base.level, ...saved.level, progression: { ...base.level.progression, ...saved.level?.progression } },
+    };
   } catch {
     return base;
   }

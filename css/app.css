@@ -1064,3 +1064,109 @@ body.in-workout main {
   color: var(--ink);
   resize: vertical;
 }
+
+/* ---------- návrhy a progrese ---------- */
+.suggestion {
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+}
+.suggestion .btn-primary.small-btn,
+.suggestion .btn-primary {
+  min-height: 52px;
+  font-size: 1.05rem;
+}
+.suggestion .btn-secondary {
+  background: var(--surface);
+}
+.streak {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.streak i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  flex: none;
+}
+.streak i.on {
+  background: var(--accent);
+}
+.streak span {
+  margin-left: 4px;
+}
+.seg.six {
+  grid-template-columns: repeat(6, 1fr);
+}
+.stage-select {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}
+.stage-select label {
+  display: grid;
+  grid-template-columns: 6.5em 1fr;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.stage-select select {
+  min-width: 0;
+  min-height: 44px;
+  font: 0.9rem var(--f-body);
+  padding: 0 8px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.stages {
+  border-top: 1px solid var(--rule-soft);
+  padding-top: 8px;
+}
+.stages ol {
+  margin: 4px 0 0;
+  padding-left: 1.6em;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+.stages li.current {
+  color: var(--accent);
+  font-weight: 700;
+}
+.reserve {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.reserve button {
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 600 1rem var(--f-body);
+  text-align: left;
+}
+.reserve button small {
+  font-weight: 400;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.reserve button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.reserve button.on small {
+  color: var(--accent-ink);
+}

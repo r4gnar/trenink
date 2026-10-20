@@ -2,7 +2,8 @@
 // Celý rozpracovaný trénink žije v state.inProgress a ukládá se po každém kroku,
 // takže zavření appky ani zamčený telefon o nic nepřipraví.
 import { TECHNIQUE } from './content.js';
-import { EXERCISES, circuitFor, roundsFor, warmupFor, weekPlan } from './plan.js';
+import { EXERCISES, PROGRESSION, circuitFor, roundsFor, stageLabel, warmupFor, weekPlan } from './plan.js';
+import { suggestAfterSession } from './progress.js';
 import { keepScreenOn, signalGo, signalNext, signalSoon, unlockAudio } from './signals.js';
 import { getState, update } from './store.js';
 import { esc, formatClock, html, plural } from './util.js';
@@ -26,11 +27,12 @@ export function startWorkout() {
       rounds: roundsFor(week, s.settings),
       restSec: s.settings.restSec ?? weekPlan(week).restSec,
       transitionSec: s.settings.transitionSec,
-      circuit: circuitFor(week, s.settings).map(({ id, reps, sided, variant }) => ({
+      circuit: circuitFor(s.level, s.settings).map(({ id, reps, sided, variant, stage }) => ({
         id,
         reps,
         sided,
         variant: id === 'row' && rowVariant ? [rowVariant, variant].filter(Boolean).join(' · ') : variant ?? null,
+        ...(stage != null && { stage }),
       })),
       warmup: warmupFor(week).map((w) => ({ text: w.text, detail: w.detail ?? null, done: false })),
       step: 0,
@@ -41,6 +43,7 @@ export function startWorkout() {
       stepBeforeEnd: null,
       cleanTechnique: null,
       soreness: null,
+      reserve: {}, // fáze progrese: cviky s rezervou 2+ opakování
       note: '',
     };
   });
@@ -116,6 +119,7 @@ export function mountWorkout(root) {
   const steps = buildSteps(w());
   const doneIndex = steps.length - 1;
   let soonFired = false;
+  let shownStep = null;
 
   document.body.classList.add('in-workout');
   keepScreenOn(true);
@@ -310,6 +314,22 @@ export function mountWorkout(root) {
           ${yesNo('cleanTechnique', x.cleanTechnique)}
           <h3>Měl jsi ještě svalovku z minulého tréninku?</h3>
           ${yesNo('soreness', x.soreness)}
+          ${x.phase === 'progression'
+            ? html`
+              <h3>U kterých cviků jsi měl rezervu 2+ opakování?</h3>
+              <p class="muted small">Na posledním okruhu, s čistou technikou. Dvakrát po sobě ano → appka navrhne vyšší stupeň.</p>
+              <div class="reserve">
+                ${x.circuit
+                  .filter((c) => PROGRESSION[c.id])
+                  .map(
+                    (c) => html`
+                      <button type="button" data-act="reserve" data-id="${c.id}" class="${x.reserve?.[c.id] ? 'on' : ''}" aria-pressed="${!!x.reserve?.[c.id]}">
+                        <span>${esc(EXERCISES[c.id].short)}</span>
+                        <small>${esc(stageLabel(c.id, c.stage ?? 0))}</small>
+                      </button>`,
+                  )}
+              </div>`
+            : ''}
           <label class="note-field">
             <span>Poznámka <span class="muted">(nepovinná)</span></span>
             <textarea id="note" rows="3" placeholder="Např. koleno při dřepu, nová guma…">${esc(x.note)}</textarea>
@@ -327,7 +347,8 @@ export function mountWorkout(root) {
     const st = steps[w().step];
     const views = { warmup: viewWarmup, ex: viewExercise, trans: viewTransition, rest: viewRest, done: viewDone };
     root.innerHTML = html`<div class="wk wk-${st.t}">${st.t === 'done' ? '' : topBar(st)}${views[st.t](st)}</div>`;
-    window.scrollTo(0, 0);
+    if (w().step !== shownStep) window.scrollTo(0, 0);
+    shownStep = w().step;
   }
 
   // ---------- ovládání ----------
@@ -378,6 +399,12 @@ export function mountWorkout(root) {
         x[btn.dataset.q] = btn.dataset.v === 'true';
       });
       render();
+    } else if (act === 'reserve') {
+      save((x) => {
+        x.reserve ??= {};
+        x.reserve[btn.dataset.id] = !x.reserve[btn.dataset.id];
+      });
+      render();
     } else if (act === 'resume') {
       goTo(w().stepBeforeEnd ?? doneIndex - 1);
     } else if (act === 'save') {
@@ -408,9 +435,11 @@ export function mountWorkout(root) {
         results: x.results,
         cleanTechnique: x.cleanTechnique,
         soreness: x.soreness,
+        ...(x.phase === 'progression' && { reserve: { ...x.reserve } }),
         note: x.note.trim(),
       });
       s.inProgress = null;
+      s.pendingSuggestion = suggestAfterSession(s);
     });
     location.hash = '#/';
   }

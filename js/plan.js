@@ -171,6 +171,22 @@ export const WEEKS = [
   },
 ];
 
+// Fáze progrese po 5. týdnu: objem i okruhy zůstávají jako v T5, každý cvik má vlastní stupeň.
+// Pořadí podle plánu: spouštění 3 s → těžší varianta → zátěž. Co už T5 obsahuje
+// (dřep pauza dole, kliky vyšší podložka, veslování návrat 3 s), je rovnou ve stupni 0.
+export const PROGRESSION = {
+  squat: ['pauza 2 s dole', 'pauza 2 s dole + spouštění 3 s', 'spouštění 3 s + zátěž (batoh)'],
+  pushup: ['vyšší podložka', 'vyšší podložka + spouštění 3 s', 'spouštění 3 s + zátěž (batoh)'],
+  row: ['návrat 3 s', 'těžší varianta — tužší guma / vodorovnější tělo'],
+  bridge: [null, 'spouštění 3 s', 'noha na vyvýšení', 'noha na vyvýšení + zátěž (batoh na pánvi)'],
+  deadbug: [null, 'pomalejší tempo, plnější rozsah'],
+};
+export const PROGRESSION_WEEK = 5;
+
+export function stageLabel(id, stage) {
+  return PROGRESSION[id]?.[stage] ?? 'základ';
+}
+
 // Když je Superman v nastavení „vždy“ a týden ho nemá.
 export const SUPERMAN_DEFAULT = { reps: 10 };
 
@@ -182,8 +198,20 @@ export function weekPlan(weekNo) {
   return WEEKS.find((w) => w.week === weekNo) ?? WEEKS[0];
 }
 
-// Seznam cviků okruhu pro daný týden a nastavení, v pevném pořadí.
-export function circuitFor(weekNo, settings) {
+// Seznam cviků okruhu pro aktuální úroveň a nastavení, v pevném pořadí.
+// level = { phase: 'ramp' | 'progression', week, progression: { cvik: stupeň } }
+export function circuitFor(level, settings) {
+  if (level.phase === 'progression') {
+    return circuitForWeek(PROGRESSION_WEEK, settings).map((c) => {
+      if (!PROGRESSION[c.id]) return c;
+      const stage = level.progression?.[c.id] ?? 0;
+      return { ...c, stage, variant: PROGRESSION[c.id][stage] ?? undefined };
+    });
+  }
+  return circuitForWeek(level.week, settings);
+}
+
+function circuitForWeek(weekNo, settings) {
   const week = weekPlan(weekNo);
   return CIRCUIT_ORDER.flatMap((id) => {
     let item = week.items[id];

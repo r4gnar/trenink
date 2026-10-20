@@ -2,20 +2,23 @@ import { BODYMAP, TECHNIQUE } from './content.js';
 import {
   EXERCISES,
   CIRCUIT_ORDER,
+  PROGRESSION,
   RULES,
   WEEKS,
   circuitFor,
   minutesFor,
   roundsFor,
+  stageLabel,
   warmupFor,
   weekPlan,
 } from './plan.js';
+import { applySuggestion, cleanStreak, describeChange, suggestAfterGap, zeroStages } from './progress.js';
 import { signalGo, unlockAudio } from './signals.js';
 import { getState, update, requestPersistence } from './store.js';
 import { daysSince, esc, formatTime, html, plural } from './util.js';
 import { discardWorkout, mountWorkout, startWorkout } from './workout.js';
 
-export const APP_VERSION = '0.2.0';
+export const APP_VERSION = '0.3.0';
 
 const $main = document.getElementById('main');
 const $title = document.getElementById('title');
@@ -36,7 +39,7 @@ function viewHome() {
   const { week } = state.level;
   const plan = weekPlan(week);
   const rounds = roundsFor(week, state.settings);
-  const circuit = circuitFor(week, state.settings);
+  const circuit = circuitFor(state.level, state.settings);
   const last = state.sessions.at(-1);
 
   let lastLine = 'Zatím žádný zaznamenaný trénink.';
@@ -48,7 +51,29 @@ function viewHome() {
         : `Poslední trénink před ${d} ${plural(d, 'dnem', 'dny', 'dny')}.`;
   }
 
+  const sug = currentSuggestion(state);
+  const streak = cleanStreak(state);
+
   return html`
+    ${sug
+      ? html`
+        <section class="card suggestion">
+          <p class="eyebrow">Návrh podle plánu</p>
+          <h3>${esc(sug.title)}</h3>
+          <p>${esc(sug.text)}</p>
+          ${describeChange(sug, state).length
+            ? html`<ul class="plain-list">${describeChange(sug, state).map((line) => html`<li>${esc(line)}</li>`)}</ul>`
+            : ''}
+          ${sug.kind === 'repeat'
+            ? html`<button type="button" class="btn-primary" data-act="sug-no">Rozumím</button>`
+            : html`
+              <div class="wk-row">
+                <button type="button" class="btn-secondary" data-act="sug-no">Ještě ne</button>
+                <button type="button" class="btn-primary small-btn" data-act="sug-yes">Potvrdit</button>
+              </div>`}
+        </section>`
+      : ''}
+
     <section class="card level">
       <p class="eyebrow">Aktuální úroveň</p>
       <h2 class="level-name">${levelLabel(state)}</h2>
@@ -58,7 +83,13 @@ function viewHome() {
         <span>~${minutesFor(week, state.settings)} min</span>
       </p>
       <p class="muted">${lastLine}</p>
-      <a class="link-small" href="#/nastaveni">Změnit týden</a>
+      <p class="streak small">
+        ${Array.from({ length: streak.needed }, (_, i) => html`<i class="${i < streak.done ? 'on' : ''}"></i>`)}
+        <span>${state.level.phase === 'ramp'
+          ? `Čisté tréninky na tomto týdnu: ${streak.done} / ${streak.needed}`
+          : `Čisté tréninky v řadě: ${streak.done} / ${streak.needed}`}</span>
+      </p>
+      <a class="link-small" href="#/nastaveni">Změnit úroveň</a>
     </section>
 
     ${state.inProgress
@@ -95,10 +126,15 @@ function viewHome() {
   `;
 }
 
+// Návrh po posledním tréninku má přednost před návrhem po pauze.
+function currentSuggestion(state) {
+  return state.pendingSuggestion ?? suggestAfterGap(state);
+}
+
 function viewExercises() {
   const state = getState();
   const { week } = state.level;
-  const thisWeek = Object.fromEntries(circuitFor(week, state.settings).map((c) => [c.id, c]));
+  const thisWeek = Object.fromEntries(circuitFor(state.level, state.settings).map((c) => [c.id, c]));
 
   const row = (id, idx) => {
     const ex = EXERCISES[id];
@@ -140,7 +176,7 @@ function viewExercise(id) {
   const ex = EXERCISES[id];
   if (!ex) return viewNotFound();
   const state = getState();
-  const now = circuitFor(state.level.week, state.settings).find((c) => c.id === id);
+  const now = circuitFor(state.level, state.settings).find((c) => c.id === id);
 
   let variants = '';
   if (ex.variants) {
@@ -233,6 +269,21 @@ function viewPlan() {
       </ol>
       <p class="muted small">Škrtá se vždycky okruh, nikdy kvalita. Čas se nepřidává.</p>
     </section>
+
+    <section class="card">
+      <h3>Stupně progrese</h3>
+      <p class="muted small">Objem a okruhy zůstávají jako v 5. týdnu. Co už 5. týden obsahuje, je rovnou ve stupni 0. Posun o stupeň appka navrhne, když u cviku dvakrát po sobě zvládneš plný objem čistě a s rezervou 2+ opakování.</p>
+      ${Object.entries(PROGRESSION).map(([id, stages]) => {
+        const current = state.level.phase === 'progression' ? state.level.progression[id] ?? 0 : null;
+        return html`
+          <div class="stages">
+            <strong>${esc(EXERCISES[id].short)}</strong>
+            <ol start="0">
+              ${stages.map((label, i) => html`<li class="${i === current ? 'current' : ''}">${esc(label ?? 'základ')}</li>`)}
+            </ol>
+          </div>`;
+      })}
+    </section>
   `;
 }
 
@@ -245,11 +296,26 @@ function viewSettings() {
   return html`
     <form id="settings" class="settings">
       <fieldset class="card">
-        <legend>Aktuální týden plánu</legend>
-        <div class="seg">
-          ${WEEKS.map((w) => radio('week', String(w.week), `T${w.week}`, String(state.level.week)))}
+        <legend>Aktuální úroveň</legend>
+        <div class="seg six">
+          ${WEEKS.map((w) => radio('week', String(w.week), `T${w.week}`, state.level.phase === 'ramp' ? String(state.level.week) : 'P'))}
+          ${radio('week', 'P', 'P', state.level.phase === 'ramp' ? String(state.level.week) : 'P')}
         </div>
-        <p class="muted small">Později bude appka posun navrhovat sama podle odcvičených tréninků.</p>
+        <p class="muted small">T1–T5 = týdny náběhu, P = fáze progrese. Posun appka navrhuje sama po trénincích — tady jen ruční oprava.</p>
+        ${state.level.phase === 'progression'
+          ? html`
+            <div class="stage-select">
+              ${Object.entries(PROGRESSION).map(
+                ([id, stages]) => html`
+                  <label>
+                    <span>${esc(EXERCISES[id].short)}</span>
+                    <select name="stage" data-id="${id}">
+                      ${stages.map((_, i) => html`<option value="${i}" ${i === (state.level.progression[id] ?? 0) ? 'selected' : ''}>${i} — ${esc(stageLabel(id, i))}</option>`)}
+                    </select>
+                  </label>`,
+              )}
+            </div>`
+          : ''}
       </fieldset>
 
       <fieldset class="card">
@@ -336,6 +402,18 @@ function bindHome() {
     unlockAudio();
     location.hash = '#/trenink';
   });
+  const answer = (accept) => {
+    update((s) => {
+      const sug = currentSuggestion(s);
+      if (!sug) return;
+      if (accept) applySuggestion(s, sug);
+      if (sug.key) s.dismissed = [...(s.dismissed ?? []), sug.key].slice(-20);
+      else s.pendingSuggestion = null;
+    });
+    render();
+  };
+  $main.querySelector('[data-act="sug-yes"]')?.addEventListener('click', () => answer(true));
+  $main.querySelector('[data-act="sug-no"]')?.addEventListener('click', () => answer(false));
   $main.querySelector('[data-act="discard"]')?.addEventListener('click', () => {
     if (!confirm('Zahodit rozpracovaný trénink? Nic z něj se neuloží.')) return;
     discardWorkout();
@@ -348,16 +426,24 @@ function bindSettings() {
   form.addEventListener('change', (e) => {
     const { name, value, checked } = e.target;
     update((st) => {
-      if (name === 'week') {
-        const to = Number(value);
-        st.levelHistory.push({ date: new Date().toISOString(), from: st.level.week, to, reason: 'manual' });
-        st.level = { ...st.level, phase: 'ramp', week: to };
+      if (name === 'week' || name === 'stage') {
+        const from = structuredClone(st.level);
+        if (name === 'stage') st.level.progression[e.target.dataset.id] = Number(value);
+        else if (value === 'P') st.level = { phase: 'progression', week: 5, progression: st.level.progression ?? zeroStages() };
+        else st.level = { ...st.level, phase: 'ramp', week: Number(value) };
+        st.levelHistory.push({ date: new Date().toISOString(), from, to: structuredClone(st.level), reason: 'manual' });
+        st.pendingSuggestion = null;
       } else if (e.target.type === 'checkbox') {
         st.settings[name] = checked;
       } else {
         st.settings[name] = value;
       }
     });
+    if (name === 'week') {
+      const y = window.scrollY;
+      render();
+      window.scrollTo(0, y);
+    }
   });
 
   document.getElementById('test-signal').addEventListener('click', () => {
